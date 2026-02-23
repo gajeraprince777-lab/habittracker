@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Habit Tracker Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #f7f9fc;
+            --container-bg: #ffffff;
+            --text-main: #2d3748;
+            --sleep-accent: #4a90e2;
+            --border: #e2e8f0;
+            --light-bg: #edf2f7;
+            
+            /* Progress Colors */
+            --lvl-0: transparent;
+            --lvl-1: #c6f6d5; /* 1pt */
+            --lvl-2: #68d391; /* 2pts */
+            --lvl-3: #38a169; /* 3pts */
+            --lvl-4: #276749; /* 4pts */
+            --lvl-5: #f56565; /* Missed / Skipped (-2pts) */
+            --lvl-6: #a0aec0; /* Rest Day (0pts) */
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px -5px rgba(0,0,0,0.05);
+            max-width: 1200px;
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        h1 { text-align: center; margin-bottom: 5px; color: #1a202c; font-weight: 800;}
+        .subtitle { text-align: center; font-style: italic; color: #718096; margin-bottom: 20px; }
+
+        .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; margin-bottom: 30px; font-size: 0.85em; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-weight: bold;}
+        .legend-box { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--border); }
+
+        .header-info {
+            display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;
+            background: var(--light-bg); padding: 15px; border-radius: 8px;
+        }
+        .header-info label { font-weight: bold; margin-right: 10px;}
+        .header-info input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 1em; }
+
+        .section-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--lvl-3); padding-bottom: 5px; margin-top: 40px; margin-bottom: 10px;}
+        .section-header h2 { border: none; padding-bottom: 0; margin: 0; color: #2d3748; }
+        h2.standalone { border-bottom: 2px solid var(--lvl-3); padding-bottom: 5px; margin-top: 40px; color: #2d3748; }
+
+        .action-btns { display: flex; gap: 10px; }
+        .small-btn { background: var(--light-bg); border: 1px solid var(--border); padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 0.9em; color: var(--text-main); font-weight: bold; transition: all 0.2s;}
+        .small-btn:hover { background: #e2e8f0; transform: translateY(-1px); }
+        .primary-btn { background: linear-gradient(135deg, var(--lvl-3), var(--lvl-4)); color: white; border: none; box-shadow: 0 4px 6px rgba(39,103,73,0.2); }
+        .primary-btn:hover { background: linear-gradient(135deg, var(--lvl-4), #1c4f37); transform: translateY(-2px); box-shadow: 0 6px 8px rgba(39,103,73,0.3);}
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; }
+        th, td { border: 1px solid var(--border); padding: 6px 2px; min-width: 32px; height: 38px; position: relative;}
+        th { background-color: var(--light-bg); font-size: 0.85em; }
+        .day-name { font-size: 0.75em; color: #718096; }
+
+        .habit-input { width: 160px; border: none; background: transparent; font-size: 0.95em; padding: 5px; outline: none; font-weight: 600; color: #2d3748;}
+        .habit-input:focus { background-color: #fff; border-bottom: 2px solid var(--lvl-3); }
+
+        .checkbox-cell, .sleep-cell { cursor: pointer; transition: all 0.2s ease; user-select: none; font-weight: bold; font-size: 0.9em; z-index: 2;}
+        
+        .lvl-0 { background-color: var(--lvl-0); color: transparent; }
+        .lvl-1 { background-color: var(--lvl-1); color: var(--text-main); }
+        .lvl-2 { background-color: var(--lvl-2); color: #fff; }
+        .lvl-3 { background-color: var(--lvl-3); color: #fff; }
+        .lvl-4 { background-color: var(--lvl-4); color: #fff; font-size: 1.1em;}
+        .lvl-5 { background-color: var(--lvl-5); color: #fff; font-size: 1.1em;}
+        .lvl-6 { background-color: var(--lvl-6); color: #fff; font-size: 1em;}
+
+        .sleep-cell:hover { background-color: #bee3f8; }
+        .sleep-cell.active { 
+            background-color: var(--sleep-accent); color: white; border-radius: 6px; 
+            transform: scale(1.15); box-shadow: 0 4px 8px rgba(0,0,0,0.2); border: none; z-index: 10;
+        }
+
+        .total-cell { font-weight: bold; color: var(--lvl-4); background-color: var(--light-bg); font-size: 0.9em;}
+        .row-label { font-weight: bold; text-align: right; padding-right: 15px; background: var(--light-bg); }
+
+        .skip-day-btn, .end-day-btn { cursor: pointer; font-size: 1.1em; transition: 0.2s; }
+        .skip-day-btn:hover, .end-day-btn:hover { background-color: #e2e8f0; transform: scale(1.15); }
+
+        .footer { margin-top: 30px; text-align: center; font-size: 0.85em; color: #a0aec0; }
+
+        /* Floating Reset Button */
+        .floating-btn {
+            position: fixed; bottom: 30px; right: 30px; background-color: #e2e8f0; color: #2d3748;
+            border: none; border-radius: 50px; padding: 12px 20px; font-size: 1em; font-weight: bold;
+            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.2s; z-index: 100;
+        }
+        .floating-btn:hover { background-color: #cbd5e0; transform: translateY(-3px); }
+        
+        /* Modal Base CSS */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(5px); z-index: 101; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 16px; width: 320px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); position: relative; }
+        .modal-content h3 { margin-top: 0; color: #2d3748; padding-right: 20px; }
+        .modal-content input, .modal-content select { width: 85%; padding: 10px; margin: 10px 0; border: 2px solid var(--border); border-radius: 8px; text-align: center; font-size: 1em; transition: 0.3s;}
+        .modal-content input:focus { border-color: var(--lvl-3); outline: none; }
+        
+        .close-x-btn { position: absolute; top: 15px; right: 20px; background: none; border: none; font-size: 2em; line-height: 0.5; cursor: pointer; color: #a0aec0; transition: color 0.2s; padding: 0; }
+        .close-x-btn:hover { color: #e53e3e; }
+
+        /* 🔥 PREMIUM DARK MODE GRAPH MODAL 🔥 */
+        .graph-modal { 
+            width: 95%; max-width: 1000px; height: 85vh; display: flex; flex-direction: column; 
+            background: linear-gradient(145deg, #1a202c, #2d3748); 
+            color: white; border: 1px solid #4a5568;
+        }
+        .graph-modal h3 { color: #f7fafc; font-weight: 800; letter-spacing: 1px;}
+        
+        /* Sleek Dropdown styling */
+        .graph-modal select { 
+            background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); 
+            font-weight: bold; width: 90%; max-width: 400px; margin: 0 auto; border-radius: 30px;
+        }
+        .graph-modal select option { background: #2d3748; color: white; }
+        
+        .chart-container { 
+            flex-grow: 1; position: relative; margin-top: 20px; padding: 20px; 
+            background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .modal-btn { background: var(--light-bg); border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; margin: 5px; width: 100%; font-weight: bold; transition: 0.2s;}
+        .modal-btn:hover { background: #e2e8f0; }
+        .danger-btn { background: #fed7d7; color: #c53030; }
+        .danger-btn:hover { background: #feb2b2; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Habit & Time Tracker</h1>
+    <div class="subtitle">1 Point = 15 Minutes</div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-box lvl-0"></div> 0</div>
+        <div class="legend-item"><div class="legend-box lvl-1"></div> 1 pt (15m)</div>
+        <div class="legend-item"><div class="legend-box lvl-2"></div> 2 pts (30m)</div>
+        <div class="legend-item"><div class="legend-box lvl-3"></div> 3 pts (45m)</div>
+        <div class="legend-item"><div class="legend-box lvl-4"></div> 4 pts (60m+)</div>
+        <div class="legend-item" style="color: #e53e3e;"><div class="legend-box lvl-5" style="background-color: var(--lvl-5);"></div> Missed (-2 pts)</div>
+        <div class="legend-item" style="color: #718096;"><div class="legend-box lvl-6" style="background-color: var(--lvl-6);"></div> Rest Day (0 pts)</div>
+    </div>
+
+    <div class="header-info">
+        <div>
+            <label for="userName">Name:</label>
+            <input type="text" id="userName" placeholder="Enter your name">
+        </div>
+        <div>
+            <label for="monthYearPicker">Select Month:</label>
+            <input type="month" id="monthYearPicker">
+        </div>
+    </div>
+
+    <div class="section-header">
+        <h2>Protocols Dashboard</h2>
+        <div class="action-btns">
+            <button class="small-btn primary-btn" id="openGraphModalBtn">📊 Premium Analytics</button>
+            <button class="small-btn" id="changeHabitCountBtn">⚙️ Change #</button>
+        </div>
+    </div>
+    <div id="habitTableContainer"></div>
+
+    <h2 class="standalone">Sleep Tracker</h2>
+    <div id="sleepTableContainer"></div>
+
+    <div class="footer">
+        Based on @themayanknegi format | Data auto-saves to your browser
+    </div>
+</div>
+
+<button class="floating-btn" id="openResetModal">⚙️ Reset Data</button>
+
+<div class="modal-overlay" id="resetModal">
+    <div class="modal-content">
+        <button class="close-x-btn" id="closeResetX">&times;</button>
+        <h3>Reset Progress</h3>
+        <p style="font-size: 0.9em; color: #718096; margin-bottom: 5px;">Reset a specific day:</p>
+        <input type="number" id="resetDayInput" placeholder="Enter day (1-31)" min="1" max="31">
+        <button class="modal-btn" id="resetDayBtn">Clear Single Day</button>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+        <button class="modal-btn danger-btn" id="resetMonthBtn">Nuke Entire Month</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="graphModal">
+    <div class="modal-content graph-modal">
+        <button class="close-x-btn" id="closeGraphX" style="color: white;">&times;</button>
+        <h3>ANALYTICS ENGINE</h3>
+        <select id="chartTypeSelector">
+            <optgroup label="Daily Trends">
+                <option value="area">1. Area Chart (Daily Total Points)</option>
+                <option value="line">2. Line Chart (Daily Points Trend)</option>
+                <option value="stackedBar">3. Stacked Bar Chart (Daily Breakdown by Habit)</option>
+            </optgroup>
+            <optgroup label="Habit Leaderboards">
+                <option value="bar">4. Column Chart (Vertical Leaderboard)</option>
+                <option value="horizontalBar">5. Row Chart (Horizontal Leaderboard)</option>
+                <option value="radar">6. Radar Chart (Habit Balance Web)</option>
+                <option value="polarArea">7. Polar Area Chart (Habit Balance Rose)</option>
+            </optgroup>
+            <optgroup label="Sleep & Correlations">
+                <option value="pie">8. Pie Chart (Sleep Distribution)</option>
+                <option value="doughnut">9. Doughnut Chart (Sleep Distribution)</option>
+                <option value="scatter">10. Scatter Plot (Sleep vs. Points Earned)</option>
+            </optgroup>
+        </select>
+        
+        <div class="chart-container">
+            <canvas id="progressChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    const sleepHours = ['10hrs', '9hrs', '8hrs', '7hrs', '6hrs', '5hrs']; 
+    const dayNames = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];
+
+    const monthPicker = document.getElementById('monthYearPicker');
+    const nameInput = document.getElementById('userName');
+    const habitContainer = document.getElementById('habitTableContainer');
+    const sleepContainer = document.getElementById('sleepTableContainer');
+
+    let today = new Date();
+    let currentMonthVal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    monthPicker.value = currentMonthVal;
+
+    let chartInstance = null; 
+
+    function loadData() {
+        let savedData = JSON.parse(localStorage.getItem('habitTrackerDataV5')) || {}; 
+        if (savedData.name) nameInput.value = savedData.name;
+        
+        let monthData = savedData[monthPicker.value];
+        if (!monthData) {
+            monthData = { habits: Array(12).fill(''), checks: {}, sleep: {} };
+        }
+        return monthData;
+    }
+
+    function saveData(monthData) {
+        let savedData = JSON.parse(localStorage.getItem('habitTrackerDataV5')) || {};
+        savedData.name = nameInput.value;
+        savedData[monthPicker.value] = monthData;
+        localStorage.setItem('habitTrackerDataV5', JSON.stringify(savedData));
+    }
+
+    function getSymbolForLevel(level) {
+        if (level === 1) return '1';
+        if (level === 2) return '2';
+        if (level === 3) return '3';
+        if (level === 4) return '✓';
+        if (level === 5) return '✗';
+        if (level === 6) return '—';
+        return '';
+    }
+
+    document.getElementById('changeHabitCountBtn').addEventListener('click', () => {
+        let monthData = loadData();
+        let currentNum = monthData.habits.length;
+        let ans = prompt("How many protocols do you want to track this month?", currentNum);
+        
+        if(ans !== null) {
+            let newNum = parseInt(ans);
+            if(!isNaN(newNum) && newNum > 0 && newNum <= 50) {
+                if(newNum > currentNum) {
+                    for(let i = currentNum; i < newNum; i++) monthData.habits.push('');
+                } else if (newNum < currentNum) {
+                    if(confirm(`This will permanently remove the bottom ${currentNum - newNum} protocols from your list. Continue?`)) {
+                        monthData.habits = monthData.habits.slice(0, newNum);
+                    } else return; 
+                }
+                saveData(monthData);
+                renderApp();
+            } else alert("Please enter a valid number between 1 and 50.");
+        }
+    });
+
+    function renderApp() {
+        const year = parseInt(monthPicker.value.split('-')[0]);
+        const month = parseInt(monthPicker.value.split('-')[1]);
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+
+        let monthData = loadData();
+        let numHabits = monthData.habits.length;
+
+        let habitHtml = `<table><thead><tr><th>Habit / Protocol</th>`;
+        let daysHtml = `<tr><th class="day-name">Day</th>`;
+        let skipHtml = `<tr><th style="font-size: 0.75em; color: #718096;">Rest Day ↓</th>`;
+        let endHtml  = `<tr><th style="font-size: 0.75em; color: #e53e3e;">End Day ↓</th>`;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            habitHtml += `<th>${d}</th>`;
+            let dayOfWeek = dayNames[(firstDayOfWeek + d - 1) % 7];
+            daysHtml += `<th class="day-name">${dayOfWeek}</th>`;
+            skipHtml += `<th class="skip-day-btn" data-day="${d}" title="Rest Day [0pts]">🚫</th>`;
+            endHtml += `<th class="end-day-btn" data-day="${d}" title="End Day: Mark blanks as Missed [-2pts]">🏁</th>`;
+        }
+        habitHtml += `</tr>${daysHtml}</tr>${skipHtml}</tr>${endHtml}</tr></thead><tbody id="habitBody">`;
+        
+        for (let h = 0; h < numHabits; h++) {
+            let habitName = monthData.habits[h] || '';
+            habitHtml += `<tr><td><input type="text" class="habit-input" data-index="${h}" value="${habitName}" placeholder="Protocol ${h+1}"></td>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                let level = monthData.checks[`${h}-${d}`] || 0;
+                let symbol = getSymbolForLevel(level);
+                habitHtml += `<td class="checkbox-cell lvl-${level}" data-habit="${h}" data-day="${d}" data-level="${level}">${symbol}</td>`;
+            }
+            habitHtml += `</tr>`;
+        }
+        
+        habitHtml += `</tbody><tfoot><tr><td class="row-label">Total Pts</td>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            habitHtml += `<td class="total-cell" id="total-${d}">0</td>`;
+        }
+        habitHtml += `</tr></tfoot></table>`;
+        habitContainer.innerHTML = habitHtml;
+
+        let sleepHtml = `<table><thead><tr><th>Hours</th>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            sleepHtml += `<th>${d}</th>`;
+        }
+        sleepHtml += `</tr></thead><tbody>`;
+        sleepHours.forEach(hour => {
+            sleepHtml += `<tr><td class="row-label">${hour}</td>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                let isChecked = monthData.sleep[d] === hour ? 'active' : '';
+                let symbol = isChecked ? '●' : '';
+                sleepHtml += `<td class="sleep-cell ${isChecked}" data-hour="${hour}" data-day="${d}">${symbol}</td>`;
+            }
+            sleepHtml += `</tr>`;
+        });
+        sleepHtml += `</tbody></table>`;
+        sleepContainer.innerHTML = sleepHtml;
+
+        attachEventListeners(monthData, daysInMonth, numHabits);
+        updateAllTotals(daysInMonth);
+    }
+
+    function attachEventListeners(monthData, daysInMonth, numHabits) {
+        nameInput.addEventListener('input', () => saveData(monthData));
+        document.querySelectorAll('.habit-input').forEach(input => {
+            input.addEventListener('input', (e) => {
+                monthData.habits[e.target.dataset.index] = e.target.value;
+                saveData(monthData);
+            });
+        });
+
+        document.querySelectorAll('.skip-day-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                let d = this.dataset.day;
+                for(let h = 0; h < numHabits; h++) {
+                    let currentLevel = monthData.checks[`${h}-${d}`] || 0;
+                    if (currentLevel === 0) {
+                        monthData.checks[`${h}-${d}`] = 6; 
+                        let cell = document.querySelector(`.checkbox-cell[data-habit="${h}"][data-day="${d}"]`);
+                        if(cell) { cell.className = `checkbox-cell lvl-6`; cell.dataset.level = 6; cell.innerHTML = '—'; }
+                    }
+                }
+                saveData(monthData); updateTotals(d);
+            });
+        });
+
+        document.querySelectorAll('.end-day-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                let d = this.dataset.day;
+                for(let h = 0; h < numHabits; h++) {
+                    let currentLevel = monthData.checks[`${h}-${d}`] || 0;
+                    if (currentLevel === 0) {
+                        monthData.checks[`${h}-${d}`] = 5; 
+                        let cell = document.querySelector(`.checkbox-cell[data-habit="${h}"][data-day="${d}"]`);
+                        if(cell) { cell.className = `checkbox-cell lvl-5`; cell.dataset.level = 5; cell.innerHTML = '✗'; }
+                    }
+                }
+                saveData(monthData); updateTotals(d);
+            });
+        });
+
+        document.querySelectorAll('.checkbox-cell').forEach(cell => {
+            cell.addEventListener('click', function() {
+                let h = this.dataset.habit;
+                let d = this.dataset.day;
+                let currentLevel = parseInt(this.dataset.level);
+                let nextLevel = (currentLevel + 1) % 7; 
+                
+                this.className = `checkbox-cell lvl-${nextLevel}`;
+                this.dataset.level = nextLevel;
+                this.innerHTML = getSymbolForLevel(nextLevel);
+
+                if(nextLevel === 0) delete monthData.checks[`${h}-${d}`];
+                else monthData.checks[`${h}-${d}`] = nextLevel;
+                
+                saveData(monthData); updateTotals(d);
+            });
+        });
+
+        document.querySelectorAll('.sleep-cell').forEach(cell => {
+            cell.addEventListener('click', function() {
+                let d = this.dataset.day;
+                let hour = this.dataset.hour;
+
+                document.querySelectorAll(`.sleep-cell[data-day="${d}"]`).forEach(c => {
+                    c.classList.remove('active'); c.innerHTML = '';
+                });
+
+                this.classList.add('active');
+                this.innerHTML = '●';
+                monthData.sleep[d] = hour;
+                saveData(monthData);
+            });
+        });
+    }
+
+    function updateTotals(day) {
+        let cells = document.querySelectorAll(`.checkbox-cell[data-day="${day}"]`);
+        let totalPoints = 0;
+        cells.forEach(cell => {
+            let val = parseInt(cell.dataset.level);
+            if(val > 0 && val < 5) totalPoints += val;      
+            else if (val === 5) totalPoints -= 2;      
+        });
+        
+        let totalElement = document.getElementById(`total-${day}`);
+        totalElement.innerText = totalPoints;
+        if (totalPoints < 0) totalElement.style.color = '#e53e3e';
+        else totalElement.style.color = 'var(--lvl-4)';
+    }
+
+    function updateAllTotals(daysInMonth) {
+        for(let d = 1; d <= daysInMonth; d++) updateTotals(d);
+    }
+
+    const resetModal = document.getElementById('resetModal');
+    const graphModal = document.getElementById('graphModal');
+
+    document.getElementById('openResetModal').addEventListener('click', () => {
+        resetModal.style.display = 'flex';
+        document.getElementById('resetDayInput').value = ''; 
+    });
+    document.getElementById('closeResetX').addEventListener('click', () => { resetModal.style.display = 'none'; });
+
+    document.getElementById('openGraphModalBtn').addEventListener('click', () => {
+        graphModal.style.display = 'flex';
+        renderGraph(); 
+    });
+    document.getElementById('closeGraphX').addEventListener('click', () => {
+        graphModal.style.display = 'none';
+    });
+
+    document.getElementById('resetDayBtn').addEventListener('click', () => {
+        const dayInput = parseInt(document.getElementById('resetDayInput').value);
+        if(!dayInput || dayInput < 1 || dayInput > 31) { alert("Please enter a valid day number."); return; }
+        let monthData = loadData();
+        let currentNumHabits = monthData.habits.length;
+        for (let h = 0; h < currentNumHabits; h++) delete monthData.checks[`${h}-${dayInput}`];
+        delete monthData.sleep[dayInput];
+        saveData(monthData); renderApp(); resetModal.style.display = 'none';
+    });
+
+    document.getElementById('resetMonthBtn').addEventListener('click', () => {
+        if(confirm("Are you sure? This will clear all checks and sleep data for this month.")) {
+            let monthData = loadData();
+            monthData.checks = {}; monthData.sleep = {};
+            saveData(monthData); renderApp(); resetModal.style.display = 'none';
+        }
+    });
+
+    // 🔥 PREMIUM CHART CREATIVITY OVERHAUL 🔥
+    Chart.defaults.color = '#cbd5e0';
+    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+    Chart.defaults.font.size = 13;
+    
+    // Custom beautiful tooltips
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+    Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
+    Chart.defaults.plugins.tooltip.padding = 12;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.plugins.tooltip.displayColors = true;
+
+    const chartTypeSelector = document.getElementById('chartTypeSelector');
+    chartTypeSelector.addEventListener('change', renderGraph);
+
+    // Neon / Cyberpunk-esque Palettes for dark mode
+    const premiumColors = [
+        '#00f2fe', '#4facfe', '#f093fb', '#f5576c', '#43e97b', '#38f9d7', 
+        '#fa709a', '#fee140', '#cfd9df', '#e2ebf0', '#a18cd1', '#fbc2eb'
+    ];
+    
+    // Create stunning Canvas Gradients dynamically
+    function createGradient(ctx, colorStart, colorEnd) {
+        let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, colorStart);
+        gradient.addColorStop(1, colorEnd);
+        return gradient;
+    }
+
+    function renderGraph() {
+        const ctx = document.getElementById('progressChart').getContext('2d');
+        const chartType = chartTypeSelector.value;
+        let monthData = loadData();
+        const year = parseInt(monthPicker.value.split('-')[0]);
+        const month = parseInt(monthPicker.value.split('-')[1]);
+        const daysInMonth = new Date(year, month, 0).getDate();
+
+        if(chartInstance) chartInstance.destroy();
+
+        // Dark mode grid styling
+        const gridConfig = { color: 'rgba(255, 255, 255, 0.05)', borderColor: 'transparent' };
+
+        let config = {};
+
+        // 1 & 2: AREA and LINE (Neon Glow)
+        if (chartType === 'area' || chartType === 'line') {
+            let labels = [];
+            let dataPoints = [];
+            for(let d = 1; d <= daysInMonth; d++) {
+                labels.push(`Day ${d}`);
+                let dailyTotal = 0;
+                for(let h = 0; h < monthData.habits.length; h++) {
+                    let val = monthData.checks[`${h}-${d}`];
+                    if(val > 0 && val < 5) dailyTotal += val; 
+                    else if(val === 5) dailyTotal -= 2; 
+                }
+                dataPoints.push(dailyTotal);
+            }
+
+            // Beautiful Purple/Blue Neon Gradient
+            const lineGradient = createGradient(ctx, 'rgba(168, 85, 247, 0.8)', 'rgba(59, 130, 246, 0.05)');
+
+            config = {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Net Daily Points',
+                        data: dataPoints,
+                        borderColor: '#a855f7', 
+                        backgroundColor: chartType === 'area' ? lineGradient : 'transparent', 
+                        borderWidth: 3,
+                        fill: chartType === 'area',
+                        tension: 0.4, // Super smooth curves
+                        pointBackgroundColor: '#1a202c',
+                        pointBorderColor: '#00f2fe',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 8,
+                        pointHoverBackgroundColor: '#00f2fe',
+                        pointHoverBorderColor: '#fff'
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { grid: gridConfig }, y: { grid: gridConfig } },
+                    animation: { easing: 'easeOutQuart', duration: 1000 }
+                }
+            };
+
+        // 3: STACKED BAR (Gradient Stacks)
+        } else if (chartType === 'stackedBar') {
+            let labels = [];
+            for(let d = 1; d <= daysInMonth; d++) labels.push(`Day ${d}`);
+
+            let datasets = [];
+            for(let h = 0; h < monthData.habits.length; h++) {
+                let habitData = [];
+                for(let d = 1; d <= daysInMonth; d++) {
+                    let val = monthData.checks[`${h}-${d}`];
+                    if(val > 0 && val < 5) habitData.push(val);
+                    else if (val === 5) habitData.push(-2); 
+                    else habitData.push(0);
+                }
+                datasets.push({
+                    label: monthData.habits[h] || `Protocol ${h+1}`,
+                    data: habitData,
+                    backgroundColor: premiumColors[h % premiumColors.length],
+                    borderRadius: 3,
+                    borderWidth: 1,
+                    borderColor: '#1a202c'
+                });
+            }
+
+            config = {
+                type: 'bar',
+                data: { labels: labels, datasets: datasets },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { x: { stacked: true, grid: gridConfig }, y: { stacked: true, grid: gridConfig } } 
+                }
+            };
+
+        // 4 & 5: BAR and HORIZONTAL BAR (Fluid Gradient Bars)
+        } else if (chartType === 'bar' || chartType === 'horizontalBar') {
+            let labels = [];
+            let dataPoints = [];
+            let backgroundColors = [];
+            
+            for(let h = 0; h < monthData.habits.length; h++) {
+                labels.push(monthData.habits[h] || `Protocol ${h+1}`);
+                backgroundColors.push(premiumColors[h % premiumColors.length]);
+                
+                let habitTotal = 0;
+                for(let d = 1; d <= daysInMonth; d++) {
+                    let val = monthData.checks[`${h}-${d}`];
+                    if(val > 0 && val < 5) habitTotal += val;
+                    else if (val === 5) habitTotal -= 2; 
+                }
+                dataPoints.push(habitTotal);
+            }
+
+            config = {
+                type: chartType === 'horizontalBar' ? 'bar' : 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Net Points',
+                        data: dataPoints,
+                        backgroundColor: backgroundColors,
+                        borderRadius: 8,
+                        barPercentage: 0.7
+                    }]
+                },
+                options: { 
+                    indexAxis: chartType === 'horizontalBar' ? 'y' : 'x',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { grid: gridConfig }, y: { grid: gridConfig } },
+                    animation: { easing: 'easeOutElastic', duration: 1200 } // Bouncy load
+                }
+            };
+
+        // 6 & 7: RADAR and POLAR AREA (Glowing Webs)
+        } else if (chartType === 'radar' || chartType === 'polarArea') {
+            let labels = [];
+            let dataPoints = [];
+            let bgColors = [];
+            
+            for(let h = 0; h < monthData.habits.length; h++) {
+                labels.push(monthData.habits[h] || `Protocol ${h+1}`);
+                // Use hex to RGBA conversion trick for translucent fills
+                let hex = premiumColors[h % premiumColors.length];
+                bgColors.push(hex + '40'); // 25% opacity
+                
+                let habitTotal = 0;
+                for(let d = 1; d <= daysInMonth; d++) {
+                    let val = monthData.checks[`${h}-${d}`];
+                    if(val > 0 && val < 5) habitTotal += val;
+                    else if (val === 5) habitTotal -= 2;
+                }
+                dataPoints.push(habitTotal);
+            }
+
+            config = {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Points Earned',
+                        data: dataPoints,
+                        backgroundColor: chartType === 'radar' ? 'rgba(0, 242, 254, 0.3)' : bgColors,
+                        borderColor: chartType === 'radar' ? '#00f2fe' : 'rgba(255,255,255,0.2)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#f093fb',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { r: { grid: {color: 'rgba(255,255,255,0.1)'}, angleLines: {color: 'rgba(255,255,255,0.1)'}, ticks: {backdropColor: 'transparent', color: '#cbd5e0'} } }
+                }
+            };
+
+        // 8 & 9: PIE and DOUGHNUT (Exploding Hover & Inner Text)
+        } else if (chartType === 'pie' || chartType === 'doughnut') {
+            let sleepCounts = { '10hrs': 0, '9hrs': 0, '8hrs': 0, '7hrs': 0, '6hrs': 0, '5hrs': 0 };
+            let hasSleepData = false;
+            
+            for(let d = 1; d <= daysInMonth; d++) {
+                let s = monthData.sleep[d];
+                if(s && sleepCounts[s] !== undefined) { sleepCounts[s]++; hasSleepData = true; }
+            }
+            if(!hasSleepData) sleepCounts = { '10hrs': 1, '9hrs': 2, '8hrs': 10, '7hrs': 5, '6hrs': 2, '5hrs': 0 };
+
+            config = {
+                type: chartType,
+                data: {
+                    labels: Object.keys(sleepCounts),
+                    datasets: [{
+                        data: Object.values(sleepCounts),
+                        backgroundColor: [ '#4facfe', '#00f2fe', '#43e97b', '#f093fb', '#f5576c', '#fa709a'],
+                        borderWidth: 3, 
+                        borderColor: '#1a202c', 
+                        hoverOffset: 15 // Explodes the slice out on hover!
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: chartType === 'doughnut' ? '70%' : '0%', // Sleek thin doughnut
+                    animation: { animateScale: true, animateRotate: true }
+                }
+            };
+
+        // 10: SCATTER PLOT (Glowing Nodes)
+        } else if (chartType === 'scatter') {
+            let scatterData = [];
+            
+            for(let d = 1; d <= daysInMonth; d++) {
+                let s = monthData.sleep[d];
+                if(s) {
+                    let hours = parseInt(s.replace('hrs', ''));
+                    let dailyTotal = 0;
+                    for(let h = 0; h < monthData.habits.length; h++) {
+                        let val = monthData.checks[`${h}-${d}`];
+                        if(val > 0 && val < 5) dailyTotal += val;
+                        else if (val === 5) dailyTotal -= 2;
+                    }
+                    scatterData.push({ x: hours, y: dailyTotal });
+                }
+            }
+
+            if(scatterData.length === 0) {
+                scatterData = [ {x: 5, y: -2}, {x: 6, y: 5}, {x: 7, y: 12}, {x: 8, y: 20}, {x: 8, y: 18}, {x: 9, y: 22} ];
+            }
+
+            config = {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Points vs. Sleep',
+                        data: scatterData,
+                        backgroundColor: '#00f2fe',
+                        borderColor: '#fff',
+                        borderWidth: 1,
+                        pointRadius: 8,
+                        pointHoverRadius: 12
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Hours of Sleep', color: '#a0aec0' }, min: 4, max: 11, grid: gridConfig },
+                        y: { title: { display: true, text: 'Net Daily Points', color: '#a0aec0' }, grid: gridConfig }
+                    }
+                }
+            };
+        }
+
+        chartInstance = new Chart(ctx, config);
+    }
+
+    monthPicker.addEventListener('change', renderApp);
+    renderApp();
+</script>
+</body>
+</html>
+<!--all clear new project done-->
